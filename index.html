@@ -9,6 +9,7 @@
             --primary-color: #f06292;
             --bg-color: #fff5f8;
             --accent-color: #d81b60;
+            --cancel-color: #9e9e9e;
         }
         
         body { 
@@ -25,7 +26,7 @@
         .btn-group { display: flex; gap: 5px; }
         button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; transition: 0.3s; font-size: 14px; }
         .btn-edit { background-color: #64b5f6; color: white; white-space: nowrap; }
-        .btn-refresh { background-color: #9e9e9e; color: white; white-space: nowrap; }
+        .btn-refresh { background-color: var(--cancel-color); color: white; white-space: nowrap; }
         .btn-add { background-color: var(--primary-color); color: white; margin-bottom: 10px; width: 100%; }
         .btn-delete { background-color: #e57373; color: white; padding: 5px; font-size: 12px; border-radius: 4px; }
 
@@ -68,7 +69,7 @@
         </div>
         <div class="btn-group">
             <button id="mainEditBtn" class="btn-edit" onclick="toggleEditMode()">進入編輯</button>
-            <button class="btn-refresh" onclick="location.reload()">刷新</button>
+            <button id="refreshBtn" class="btn-refresh" onclick="handleRefresh()">刷新</button>
         </div>
     </div>
 
@@ -79,7 +80,7 @@
             <thead>
                 <tr>
                     <th style="width: 70px;">待產室</th>
-                    <th style="width: 80px;">姓氏</th>
+                    <th style="width: 80px;">姓名</th>
                     <th style="width: 60px;">Para</th>
                     <th style="width: 60px;">Dil</th>
                     <th style="width: 60px;">Eff</th>
@@ -102,10 +103,8 @@
             document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         }
 
-        // 時間格式清洗函數
         function formatDisplayTime(timeStr) {
             if (!timeStr || timeStr === "無紀錄") return "無紀錄";
-            // 如果偵測到 T 和 Z (ISO 格式)，將其轉換為人類易讀格式
             if (timeStr.includes('T') && timeStr.includes('Z')) {
                 const d = new Date(timeStr);
                 return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
@@ -151,8 +150,6 @@
             const tbody = document.getElementById('patientTableBody');
             document.getElementById('lastUpdate').innerText = lastTime;
             tbody.innerHTML = '';
-
-            // 嚴謹處理 0 值顯示的函式
             const val = (v) => (v === null || v === undefined || v === "") ? "" : v;
 
             patients.forEach((p, index) => {
@@ -172,6 +169,23 @@
             });
         }
 
+        // 處理刷新/取消按鈕的動作
+        function handleRefresh() {
+            const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
+            if (isEditing) {
+                // 如果在編輯模式，則是取消編輯並退出
+                if (confirm("確定要取消編輯嗎？所有未儲存的變更將會遺失。")) {
+                    document.getElementById('mainBody').classList.remove('edit-mode');
+                    document.getElementById('mainEditBtn').innerText = "進入編輯";
+                    document.getElementById('refreshBtn').innerText = "刷新";
+                    loadData(); // 重新載入雲端原始資料
+                }
+            } else {
+                // 否則就是一般刷新
+                loadData();
+            }
+        }
+
         async function saveToCloud() {
             toggleLoading(true);
             const now = new Date();
@@ -186,7 +200,6 @@
                 renderTable();
                 alert("雲端同步成功！");
             } catch (e) {
-                // 部分瀏覽器會跳到 catch，但在 GAS 端其實已經儲存成功
                 location.reload(); 
             } finally {
                 toggleLoading(false);
@@ -195,14 +208,20 @@
 
         function toggleEditMode() {
             const body = document.getElementById('mainBody');
-            const btn = document.getElementById('mainEditBtn');
+            const editBtn = document.getElementById('mainEditBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            
             if (body.classList.contains('edit-mode')) {
+                // 點擊「完成儲存」
                 body.classList.remove('edit-mode');
-                btn.innerText = "進入編輯";
+                editBtn.innerText = "進入編輯";
+                refreshBtn.innerText = "刷新";
                 saveToCloud();
             } else {
+                // 點擊「進入編輯」
                 body.classList.add('edit-mode');
-                btn.innerText = "完成儲存";
+                editBtn.innerText = "完成儲存";
+                refreshBtn.innerText = "取消編輯";
             }
         }
 
