@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>產科小工具</title>
+    <style>
+        :root {
+            --primary-color: #f06292;
+            --bg-color: #fff5f8;
+        }
+        body { font-family: sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { color: #880e4f; margin: 0; }
+        
+        .btn-group { display: flex; gap: 10px; }
+        button { padding: 8px 16px; cursor: pointer; border: none; border-radius: 4px; transition: 0.3s; }
+        .btn-edit { background-color: #64b5f6; color: white; }
+        .btn-refresh { background-color: #81c784; color: white; }
+        .btn-add { background-color: var(--primary-color); color: white; margin-bottom: 10px; }
+        .btn-delete { background-color: #e57373; color: white; font-size: 12px; }
+        button:hover { opacity: 0.8; }
+
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+        th { background-color: var(--primary-color); color: white; }
+        
+        /* 編輯模式隱藏/顯示 */
+        .edit-only { display: none; }
+        body.edit-mode .edit-only { display: inline-block; }
+        body.edit-mode .display-only { display: none; }
+        
+        input { width: 90%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
+    </style>
+</head>
+<body id="mainBody">
+
+    <div class="header">
+        <h1>產科小工具</h1>
+        <div class="btn-group">
+            <button class="btn-edit" onclick="toggleEditMode()">進入/退出編輯</button>
+            <button class="btn-refresh" onclick="location.reload()">刷新</button>
+        </div>
+    </div>
+
+    <button class="btn-add edit-only" onclick="addRow()">+ 新增產婦</button>
+
+    <table>
+        <thead>
+            <tr>
+                <th>待產室</th>
+                <th>姓名</th>
+                <th>Para</th>
+                <th>Dilation(cm)</th>
+                <th>Effacement(%)</th>
+                <th>Station(-3 to +3)</th>
+                <th>VS姓名</th>
+                <th class="edit-only">操作</th>
+            </tr>
+        </thead>
+        <tbody id="patientTableBody">
+            </tbody>
+    </table>
+
+    <script>
+        let patients = JSON.parse(localStorage.getItem('obstetricData')) || [];
+
+        // 初始化渲染
+        function renderTable() {
+            const tbody = document.getElementById('patientTableBody');
+            tbody.innerHTML = '';
+            
+            patients.forEach((p, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><span class="display-only">${p.room}</span><input class="edit-only" type="text" value="${p.room}" onchange="updateData(${index}, 'room', this.value)"></td>
+                    <td><span class="display-only">${p.name}</span><input class="edit-only" type="text" value="${p.name}" onchange="updateData(${index}, 'name', this.value)"></td>
+                    <td><span class="display-only">${p.para}</span><input class="edit-only" type="text" value="${p.para}" onchange="updateData(${index}, 'para', this.value)"></td>
+                    <td><span class="display-only">${p.dilation}</span><input class="edit-only" type="number" value="${p.dilation}" onchange="updateData(${index}, 'dilation', this.value)"></td>
+                    <td><span class="display-only">${p.effacement}</span><input class="edit-only" type="number" value="${p.effacement}" onchange="updateData(${index}, 'effacement', this.value)"></td>
+                    <td><span class="display-only">${p.station}</span><input class="edit-only" type="number" min="-3" max="3" value="${p.station}" onchange="updateData(${index}, 'station', this.value)"></td>
+                    <td><span class="display-only">${p.vs}</span><input class="edit-only" type="text" value="${p.vs}" onchange="updateData(${index}, 'vs', this.value)"></td>
+                    <td class="edit-only">
+                        <button class="btn-delete" onclick="deleteRow(${index})">刪除</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 切換編輯模式
+        function toggleEditMode() {
+            document.getElementById('mainBody').classList.toggle('edit-mode');
+            saveData();
+        }
+
+        // 新增資料
+        function addRow() {
+            patients.push({ room: '', name: '', para: '', dilation: '', effacement: '', station: '', vs: '' });
+            renderTable();
+        }
+
+        // 更新資料
+        function updateData(index, field, value) {
+            patients[index][field] = value;
+            saveData();
+        }
+
+        // 刪除資料（含二次確認）
+        function deleteRow(index) {
+            if (confirm("確定要刪除這位產婦的資料嗎？")) {
+                patients.splice(index, 1);
+                saveData();
+                renderTable();
+            }
+        }
+
+        // 儲存至 localStorage
+        function saveData() {
+            localStorage.setItem('obstetricData', JSON.stringify(patients));
+        }
+
+        // 初始載入
+        renderTable();
+    </script>
+</body>
+</html>
