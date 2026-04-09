@@ -165,27 +165,31 @@
             return `${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')}`;
         }
 
-        function renderTable() {
-            const tbody = document.getElementById('patientTableBody');
-            document.getElementById('lastUpdate').innerText = lastTime;
-            tbody.innerHTML = '';
+function renderTable() {
+    const tbody = document.getElementById('patientTableBody');
+    document.getElementById('lastUpdate').innerText = lastTime;
+    tbody.innerHTML = '';
 
-            patients.forEach((p, index) => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><span class="display-only">${p.room || ''}</span><input class="edit-only" type="text" value="${p.room || ''}" oninput="updateTempData(${index}, 'room', this.value)"></td>
-                    <td><span class="display-only">${p.name || ''}</span><input class="edit-only" type="text" value="${p.name || ''}" oninput="updateTempData(${index}, 'name', this.value)"></td>
-                    <td><span class="display-only">${p.para || ''}</span><input class="edit-only" type="text" value="${p.para || ''}" oninput="updateTempData(${index}, 'para', this.value)"></td>
-                    <td><span class="display-only">${p.dilation || ''}</span><input class="edit-only" type="number" step="0.5" value="${p.dilation || ''}" oninput="updateTempData(${index}, 'dilation', this.value)"></td>
-                    <td><span class="display-only">${p.effacement || ''}</span><input class="edit-only" type="number" value="${p.effacement || ''}" oninput="updateTempData(${index}, 'effacement', this.value)"></td>
-                    <td><span class="display-only">${p.station || ''}</span><input class="edit-only" type="text" inputmode="text" value="${p.station || ''}" oninput="updateTempData(${index}, 'station', this.value)"></td>
-                    <td><span class="display-only">${p.vs || ''}</span><input class="edit-only" type="text" value="${p.vs || ''}" oninput="updateTempData(${index}, 'vs', this.value)"></td>
-                    <td class="display-only ai-column">${estimateDeliveryTime(p)}</td>
-                    <td class="edit-only"><button class="btn-delete" onclick="deleteRow(${index})">刪除</button></td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
+    patients.forEach((p, index) => {
+        const tr = document.createElement('tr');
+        // 使用一個小函式處理：如果是 null 或 undefined 才回傳空字串，否則回傳原值
+        const val = (v) => (v === null || v === undefined) ? '' : v;
+
+        tr.innerHTML = `
+            <td><span class="display-only">${val(p.room)}</span><input class="edit-only" type="text" value="${val(p.room)}" oninput="updateTempData(${index}, 'room', this.value)"></td>
+            <td><span class="display-only">${val(p.name)}</span><input class="edit-only" type="text" value="${val(p.name)}" oninput="updateTempData(${index}, 'name', this.value)"></td>
+            <td><span class="display-only">${val(p.para)}</span><input class="edit-only" type="text" value="${val(p.para)}" oninput="updateTempData(${index}, 'para', this.value)"></td>
+            <td><span class="display-only">${val(p.dilation)}</span><input class="edit-only" type="number" step="0.5" value="${val(p.dilation)}" oninput="updateTempData(${index}, 'dilation', this.value)"></td>
+            <td><span class="display-only">${val(p.effacement)}</span><input class="edit-only" type="number" value="${val(p.effacement)}" oninput="updateTempData(${index}, 'effacement', this.value)"></td>
+            <td><span class="display-only">${val(p.station)}</span><input class="edit-only" type="text" value="${val(p.station)}" oninput="updateTempData(${index}, 'station', this.value)"></td>
+            <td><span class="display-only">${val(p.vs)}</span><input class="edit-only" type="text" value="${val(p.vs)}" oninput="updateTempData(${index}, 'vs', this.value)"></td>
+            <td class="display-only ai-column">${estimateDeliveryTime(p)}</td>
+            <td class="edit-only"><button class="btn-delete" onclick="deleteRow(${index})">刪除</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
 
         async function saveToCloud() {
             toggleLoading(true);
