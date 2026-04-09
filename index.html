@@ -7,79 +7,110 @@
     <style>
         :root {
             --primary-color: #f06292;
-            --bg-color: #fff5f8;
+            --bg-color: #fffafc;
+            --accent-color: #d81b60;
         }
-        body { font-family: sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        h1 { color: #880e4f; margin: 0; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #f8bbd0; padding-bottom: 15px; }
+        h1 { color: var(--accent-color); margin: 0; font-size: 24px; }
+        
+        .info-bar { margin-top: 5px; color: #555; font-size: 0.95em; font-weight: bold; }
         
         .btn-group { display: flex; gap: 10px; }
-        button { padding: 8px 16px; cursor: pointer; border: none; border-radius: 4px; transition: 0.3s; }
-        .btn-edit { background-color: #64b5f6; color: white; }
-        .btn-refresh { background-color: #81c784; color: white; }
-        .btn-add { background-color: var(--primary-color); color: white; margin-bottom: 10px; }
-        .btn-delete { background-color: #e57373; color: white; font-size: 12px; }
-        button:hover { opacity: 0.8; }
+        button { padding: 10px 18px; cursor: pointer; border: none; border-radius: 6px; transition: 0.2s; font-weight: bold; }
+        .btn-edit { background-color: #5c6bc0; color: white; }
+        .btn-exit { background-color: #78909c; color: white; }
+        .btn-refresh { background-color: #ffa726; color: white; }
+        .btn-add { background-color: #26a69a; color: white; margin-bottom: 15px; }
+        .btn-save { background-color: #66bb6a; color: white; width: 100%; margin-top: 25px; padding: 15px; font-size: 1.1em; border: 2px solid #2e7d32; }
+        .btn-delete { background-color: #ef5350; color: white; padding: 5px 10px; }
+        button:hover { opacity: 0.85; transform: translateY(-1px); }
 
-        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
-        th { background-color: var(--primary-color); color: white; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #eee; padding: 12px; text-align: center; }
+        th { background-color: var(--primary-color); color: white; font-size: 14px; }
         
-        /* 編輯模式隱藏/顯示 */
+        /* 模式切換邏輯 */
         .edit-only { display: none; }
         body.edit-mode .edit-only { display: inline-block; }
         body.edit-mode .display-only { display: none; }
+        body.edit-mode .btn-edit { display: none; }
+        body.edit-mode .btn-exit { display: inline-block; }
+        .btn-exit { display: none; }
         
-        input { width: 90%; padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
+        input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; text-align: center; }
+        input:focus { border-color: var(--primary-color); outline: none; background-color: #fffde7; }
+        tr:hover { background-color: #fff9fb; }
     </style>
 </head>
 <body id="mainBody">
 
     <div class="header">
-        <h1>產科小工具</h1>
+        <div>
+            <h1>產科小工具</h1>
+            <div class="info-bar">最後更新：<span id="lastUpdate">尚未儲存資料</span></div>
+        </div>
         <div class="btn-group">
-            <button class="btn-edit" onclick="toggleEditMode()">進入/退出編輯</button>
-            <button class="btn-refresh" onclick="location.reload()">刷新</button>
+            <button class="btn-edit" onclick="setEditMode(true)">編輯內容</button>
+            <button class="btn-exit" onclick="askToSave()">退出並儲存</button>
+            <button class="btn-refresh" onclick="confirmRefresh()">重新整理</button>
         </div>
     </div>
 
-    <button class="btn-add edit-only" onclick="addRow()">+ 新增產婦</button>
+    <button class="btn-add edit-only" onclick="addRow()">+ 新增產婦資料</button>
 
     <table>
         <thead>
             <tr>
-                <th>待產室</th>
-                <th>姓名</th>
-                <th>Para</th>
-                <th>Dilation(cm)</th>
-                <th>Effacement(%)</th>
-                <th>Station(-3 to +3)</th>
-                <th>VS姓名</th>
-                <th class="edit-only">操作</th>
+                <th width="10%">待產室</th>
+                <th width="15%">姓名</th>
+                <th width="10%">Para</th>
+                <th width="12%">Dilation(cm)</th>
+                <th width="12%">Effacement(%)</th>
+                <th width="12%">Station</th>
+                <th width="15%">VS姓名</th>
+                <th class="edit-only" width="10%">操作</th>
             </tr>
         </thead>
         <tbody id="patientTableBody">
             </tbody>
     </table>
 
-    <script>
-        let patients = JSON.parse(localStorage.getItem('obstetricData')) || [];
+    <button class="btn-save edit-only" onclick="askToSave()">儲存變更內容</button>
 
-        // 初始化渲染
+    <script>
+        // 初始化資料
+        let patients = JSON.parse(localStorage.getItem('ob_data_v2')) || [];
+        let lastTime = localStorage.getItem('ob_time_v2') || '尚未儲存資料';
+
+        // 格式化時間函數
+        function getFormattedDate() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            return `${y}/${m}/${d} ${hh}:${mm}:${ss}`;
+        }
+
+        // 渲染表格
         function renderTable() {
             const tbody = document.getElementById('patientTableBody');
+            document.getElementById('lastUpdate').innerText = lastTime;
             tbody.innerHTML = '';
-            
+
             patients.forEach((p, index) => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td><span class="display-only">${p.room}</span><input class="edit-only" type="text" value="${p.room}" onchange="updateData(${index}, 'room', this.value)"></td>
-                    <td><span class="display-only">${p.name}</span><input class="edit-only" type="text" value="${p.name}" onchange="updateData(${index}, 'name', this.value)"></td>
-                    <td><span class="display-only">${p.para}</span><input class="edit-only" type="text" value="${p.para}" onchange="updateData(${index}, 'para', this.value)"></td>
-                    <td><span class="display-only">${p.dilation}</span><input class="edit-only" type="number" value="${p.dilation}" onchange="updateData(${index}, 'dilation', this.value)"></td>
-                    <td><span class="display-only">${p.effacement}</span><input class="edit-only" type="number" value="${p.effacement}" onchange="updateData(${index}, 'effacement', this.value)"></td>
-                    <td><span class="display-only">${p.station}</span><input class="edit-only" type="number" min="-3" max="3" value="${p.station}" onchange="updateData(${index}, 'station', this.value)"></td>
-                    <td><span class="display-only">${p.vs}</span><input class="edit-only" type="text" value="${p.vs}" onchange="updateData(${index}, 'vs', this.value)"></td>
+                    <td><span class="display-only">${p.room || '-'}</span><input class="edit-only" type="text" value="${p.room}" oninput="updateVal(${index}, 'room', this.value)"></td>
+                    <td><span class="display-only">${p.name || '-'}</span><input class="edit-only" type="text" value="${p.name}" oninput="updateVal(${index}, 'name', this.value)"></td>
+                    <td><span class="display-only">${p.para || '-'}</span><input class="edit-only" type="text" value="${p.para}" oninput="updateVal(${index}, 'para', this.value)"></td>
+                    <td><span class="display-only">${p.dilation || '-'}</span><input class="edit-only" type="text" value="${p.dilation}" oninput="updateVal(${index}, 'dilation', this.value)"></td>
+                    <td><span class="display-only">${p.effacement || '-'}</span><input class="edit-only" type="text" value="${p.effacement}" oninput="updateVal(${index}, 'effacement', this.value)"></td>
+                    <td><span class="display-only">${p.station || '-'}</span><input class="edit-only" type="text" value="${p.station}" oninput="updateVal(${index}, 'station', this.value)"></td>
+                    <td><span class="display-only">${p.vs || '-'}</span><input class="edit-only" type="text" value="${p.vs}" oninput="updateVal(${index}, 'vs', this.value)"></td>
                     <td class="edit-only">
                         <button class="btn-delete" onclick="deleteRow(${index})">刪除</button>
                     </td>
@@ -88,39 +119,57 @@
             });
         }
 
-        // 切換編輯模式
-        function toggleEditMode() {
-            document.getElementById('mainBody').classList.toggle('edit-mode');
-            saveData();
-        }
-
-        // 新增資料
-        function addRow() {
-            patients.push({ room: '', name: '', para: '', dilation: '', effacement: '', station: '', vs: '' });
-            renderTable();
-        }
-
-        // 更新資料
-        function updateData(index, field, value) {
-            patients[index][field] = value;
-            saveData();
-        }
-
-        // 刪除資料（含二次確認）
-        function deleteRow(index) {
-            if (confirm("確定要刪除這位產婦的資料嗎？")) {
-                patients.splice(index, 1);
-                saveData();
-                renderTable();
+        function setEditMode(isEdit) {
+            if (isEdit) {
+                document.getElementById('mainBody').classList.add('edit-mode');
+            } else {
+                document.getElementById('mainBody').classList.remove('edit-mode');
             }
         }
 
-        // 儲存至 localStorage
-        function saveData() {
-            localStorage.setItem('obstetricData', JSON.stringify(patients));
+        // 退出編輯時的詢問
+        function askToSave() {
+            if (confirm("是否儲存目前的所有變更？\n點擊「確認」將儲存並更新時間，點擊「取消」則返回編輯。")) {
+                saveAll();
+            }
         }
 
-        // 初始載入
+        // 執行儲存
+        function saveAll() {
+            lastTime = getFormattedDate();
+            localStorage.setItem('ob_data_v2', JSON.stringify(patients));
+            localStorage.setItem('ob_time_v2', lastTime);
+            
+            setEditMode(false);
+            renderTable();
+            alert("資料已成功儲存！");
+        }
+
+        function addRow() {
+            patients.push({ room: '', name: '', para: '', dilation: '', effacement: '', station: '', vs: '' });
+            renderTable();
+            setEditMode(true);
+        }
+
+        function updateVal(index, field, val) {
+            patients[index][field] = val;
+        }
+
+        function deleteRow(index) {
+            if (confirm("確定要刪除此列資料嗎？")) {
+                patients.splice(index, 1);
+                renderTable();
+                setEditMode(true);
+            }
+        }
+
+        function confirmRefresh() {
+            if (confirm("重新整理將遺失「尚未儲存」的編輯內容，確定嗎？")) {
+                location.reload();
+            }
+        }
+
+        // 初始執行
         renderTable();
     </script>
 </body>
