@@ -39,10 +39,10 @@
             background: white;
         }
 
-        table { width: 100%; border-collapse: collapse; min-width: 750px; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
         th, td { border: 1px solid #eee; padding: 10px 5px; text-align: center; font-size: 14px; }
         th { background-color: var(--primary-color); color: white; white-space: nowrap; }
-        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 90px; }
+        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 110px; }
         
         .edit-only { display: none; }
         body.edit-mode .edit-only { display: table-cell; }
@@ -86,7 +86,7 @@
                     <th style="width: 60px;">Eff</th>
                     <th style="width: 70px;">Station</th>
                     <th style="width: 80px;">VS</th>
-                    <th class="display-only">預估生產時間</th>
+                    <th class="display-only">預估生產 (AI)</th>
                     <th class="edit-only">操作</th>
                 </tr>
             </thead>
@@ -127,23 +127,54 @@
             }
         }
 
+        /**
+         * 升級版：多因子產程推估公式
+         */
         function estimateDeliveryTime(p) {
-            const dilation = parseFloat(p.dilation);
-            const para = p.para ? p.para.toString().toLowerCase() : '';
+            const dil = parseFloat(p.dilation);
+            const eff = parseFloat(p.effacement) || 0;
             const station = parseFloat(p.station) || 0;
-            
-            if (isNaN(dilation) || dilation <= 0) return "--:--";
-            if (dilation >= 10) return "即將分娩";
-            
-            const isMultipara = !(para.includes('p0') || para === '0');
-            const rate = isMultipara ? 1.5 : 1.0;
-            let hoursRemaining = ((10 - dilation) / rate) - (station * 0.3);
-            if (hoursRemaining < 0.5) hoursRemaining = 0.5;
+            const paraStr = p.para ? p.para.toString().toLowerCase() : '';
 
+            // 基本有效性檢查
+            if (isNaN(dil) || dil <= 0) return "--:--";
+            if (dil >= 10) return "已全開";
+            if (dil < 4) return "潛伏期";
+
+            // 1. 決定產次基礎速率 (cm/hr)
+            // 初產婦 (P0) 基準約 1.2 cm/hr, 經產婦 (P1+) 基準約 2.0 cm/hr
+            const isMultipara = !(paraStr.includes('p0') || paraStr === '0');
+            let baseRate = isMultipara ? 2.0 : 1.2;
+
+            // 2. Dilation 加速修正 (活躍期後半進展較快)
+            // 擴張 6cm 以上進入加速期
+            if (dil >= 6) baseRate *= 1.3;
+
+            // 3. Effacement 修正 (變薄影響)
+            // 若 Effacement 沒達 80%，推估速度會稍微打折 (針對初產婦更有感)
+            if (eff < 80) {
+                baseRate *= (0.7 + (eff / 100) * 0.3);
+            }
+
+            // 4. Station 修正 (胎頭下降深度)
+            // Station 每低 1 等級 (+1, +2), 速度提升約 10%
+            const stationBonus = 1 + (station * 0.1);
+            const finalRate = baseRate * stationBonus;
+
+            // 5. 計算剩餘所需時間 (hr)
+            const remainingDil = 10 - dil;
+            let hoursRemaining = remainingDil / finalRate;
+
+            // 設定最小值限制，預留 20 分鐘準備時間
+            if (hoursRemaining < 0.33) hoursRemaining = 0.33;
+
+            // 6. 計算預估時間點 (基於最後刷新時間)
             const baseDate = (!lastTime || lastTime === '無紀錄') ? new Date() : new Date(lastTime);
             const estDate = new Date(baseDate.getTime() + hoursRemaining * 60 * 60 * 1000);
             
-            return `${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')}`;
+            const hh = estDate.getHours().toString().padStart(2, '0');
+            const mm = estDate.getMinutes().toString().padStart(2, '0');
+            return `${hh}:${mm} (約${hoursRemaining.toFixed(1)}h)`;
         }
 
         function renderTable() {
@@ -169,19 +200,16 @@
             });
         }
 
-        // 處理刷新/取消按鈕的動作
         function handleRefresh() {
             const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
             if (isEditing) {
-                // 如果在編輯模式，則是取消編輯並退出
                 if (confirm("確定要取消編輯嗎？所有未儲存的變更將會遺失。")) {
                     document.getElementById('mainBody').classList.remove('edit-mode');
                     document.getElementById('mainEditBtn').innerText = "進入編輯";
                     document.getElementById('refreshBtn').innerText = "刷新";
-                    loadData(); // 重新載入雲端原始資料
+                    loadData();
                 }
             } else {
-                // 否則就是一般刷新
                 loadData();
             }
         }
@@ -212,13 +240,11 @@
             const refreshBtn = document.getElementById('refreshBtn');
             
             if (body.classList.contains('edit-mode')) {
-                // 點擊「完成儲存」
                 body.classList.remove('edit-mode');
                 editBtn.innerText = "進入編輯";
                 refreshBtn.innerText = "刷新";
                 saveToCloud();
             } else {
-                // 點擊「進入編輯」
                 body.classList.add('edit-mode');
                 editBtn.innerText = "完成儲存";
                 refreshBtn.innerText = "取消編輯";
