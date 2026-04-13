@@ -42,7 +42,7 @@
         table { width: 100%; border-collapse: collapse; min-width: 800px; }
         th, td { border: 1px solid #eee; padding: 10px 5px; text-align: center; font-size: 14px; }
         th { background-color: var(--primary-color); color: white; white-space: nowrap; }
-        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 120px; }
+        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 130px; }
         
         .edit-only { display: none; }
         body.edit-mode .edit-only { display: table-cell; }
@@ -127,9 +127,6 @@
             }
         }
 
-        /**
-         * 終極優化版：包含潛伏期模擬的產程公式
-         */
         function estimateDeliveryTime(p) {
             const dil = parseFloat(p.dilation);
             const eff = parseFloat(p.effacement) || 0;
@@ -141,48 +138,47 @@
 
             const isMultipara = !(paraStr.includes('p0') || paraStr === '0');
             
-            // 基礎速率設定 (cm/hr)
-            let latentRate = isMultipara ? 0.8 : 0.4; // 潛伏期速率 (0-6cm)
-            let activeRate = isMultipara ? 2.0 : 1.2; // 活躍期速率 (6-10cm)
-
+            let latentRate = isMultipara ? 0.8 : 0.4;
+            let activeRate = isMultipara ? 2.0 : 1.2;
             let totalHours = 0;
 
-            // 1. 計算剩餘潛伏期時間 (到 6cm 為止)
             if (dil < 6) {
                 const remainingLatentDil = 6 - dil;
-                // Effacement 對潛伏期影響巨大 (初產婦 80% 以前通常不動)
                 let effFactor = (eff / 100);
-                if (effFactor < 0.2) effFactor = 0.2; // 最低給 0.2
-                
+                if (effFactor < 0.2) effFactor = 0.2;
                 totalHours += remainingLatentDil / (latentRate * effFactor);
-                
-                // 加上活躍期的剩餘 4cm
                 totalHours += 4 / activeRate;
             } else {
-                // 2. 已進入活躍期 (6-10cm)
                 const remainingActiveDil = 10 - dil;
-                totalHours += remainingActiveDil / (activeRate * 1.3); // 進入活躍期給予 1.3 倍加速
+                totalHours += remainingActiveDil / (activeRate * 1.3);
             }
 
-            // 3. Station 修正 (胎頭下降深度，越低越快)
             const stationBonus = 1 + (station * 0.1);
             totalHours = totalHours / stationBonus;
 
-            // 限制：最少預留 20 分鐘
             if (totalHours < 0.33) totalHours = 0.33;
 
-            // 4. 計算預估時間
             const baseDate = (!lastTime || lastTime === '無紀錄') ? new Date() : new Date(lastTime);
             const estDate = new Date(baseDate.getTime() + totalHours * 60 * 60 * 1000);
             
             const hh = estDate.getHours().toString().padStart(2, '0');
             const mm = estDate.getMinutes().toString().padStart(2, '0');
             
-            // 如果時間過長 (超過 24 小時)，顯示日期提示
-            const isNextDay = estDate.getDate() !== baseDate.getDate();
-            const dateNote = isNextDay ? `(明) ` : '';
+            // 計算日期差異標記
+            const diffTime = estDate.setHours(0,0,0,0) - baseDate.setHours(0,0,0,0);
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            
+            let dateLabel = '';
+            if (diffDays === 1) dateLabel = '(明) ';
+            else if (diffDays === 2) dateLabel = '(後) ';
+            else if (diffDays > 2) dateLabel = `(${estDate.getMonth()+1}/${estDate.getDate()}) `;
 
-            return `${dateNote}${hh}:${mm} (${totalHours.toFixed(1)}h)`;
+            // 重新取得正確的小時與分鐘（因為 setHours 改變了暫存變數）
+            const finalDate = new Date(baseDate.getTime() + totalHours * 60 * 60 * 1000);
+            const finalHH = finalDate.getHours().toString().padStart(2, '0');
+            const finalMM = finalDate.getMinutes().toString().padStart(2, '0');
+
+            return `${dateLabel}${finalHH}:${finalMM} (${totalHours.toFixed(1)}h)`;
         }
 
         function renderTable() {
