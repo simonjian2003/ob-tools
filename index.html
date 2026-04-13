@@ -5,57 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>產科小工具 - 雲端同步版</title>
     <style>
-        :root {
-            --primary-color: #f06292;
-            --bg-color: #fff5f8;
-            --accent-color: #d81b60;
-            --cancel-color: #9e9e9e;
-        }
-        
-        body { 
-            font-family: "Microsoft JhengHei", -apple-system, sans-serif; 
-            background-color: var(--bg-color); 
-            margin: 0; 
-            padding: 10px;
-        }
-        
+        :root { --primary-color: #f06292; --bg-color: #fff5f8; --accent-color: #d81b60; --cancel-color: #9e9e9e; }
+        body { font-family: "Microsoft JhengHei", -apple-system, sans-serif; background-color: var(--bg-color); margin: 0; padding: 10px; }
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
         h1 { color: #880e4f; margin: 0; font-size: 20px; }
-        .info-bar { margin-top: 5px; color: #666; font-size: 0.8em; }
-        
+        .info-bar { margin-top: 5px; color: #666; font-size: 0.8em; font-weight: bold; }
+        #lastUpdate { color: var(--accent-color); }
         .btn-group { display: flex; gap: 5px; }
         button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; transition: 0.3s; font-size: 14px; }
         .btn-edit { background-color: #64b5f6; color: white; white-space: nowrap; }
         .btn-refresh { background-color: var(--cancel-color); color: white; white-space: nowrap; }
         .btn-add { background-color: var(--primary-color); color: white; margin-bottom: 10px; width: 100%; }
         .btn-delete { background-color: #e57373; color: white; padding: 5px; font-size: 12px; border-radius: 4px; }
-
-        .table-container {
-            width: 100%;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            border-radius: 8px;
-            background: white;
-        }
-
-        table { width: 100%; border-collapse: collapse; min-width: 750px; }
+        .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 8px; background: white; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
         th, td { border: 1px solid #eee; padding: 10px 5px; text-align: center; font-size: 14px; }
         th { background-color: var(--primary-color); color: white; white-space: nowrap; }
-        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 90px; }
-        
+        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 130px; }
         .edit-only { display: none; }
         body.edit-mode .edit-only { display: table-cell; }
         body.edit-mode button.edit-only { display: block; }
         body.edit-mode .display-only { display: none; }
         body.edit-mode .btn-edit { background-color: #4caf50; }
-        
-        input { width: 100%; padding: 8px 4px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
-
-        #loadingOverlay { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(255,255,255,0.8); z-index: 1000; justify-content: center; align-items: center; font-weight: bold; color: var(--accent-color);
-        }
+        input { width: 100%; padding: 8px 4px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; text-align: center; }
+        #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 1000; justify-content: center; align-items: center; font-weight: bold; color: var(--accent-color); }
     </style>
 </head>
 <body id="mainBody">
@@ -86,7 +59,7 @@
                     <th style="width: 60px;">Eff</th>
                     <th style="width: 70px;">Station</th>
                     <th style="width: 80px;">VS</th>
-                    <th class="display-only">預估生產時間</th>
+                    <th class="display-only">預估生產時間 (AI)</th>
                     <th class="edit-only">操作</th>
                 </tr>
             </thead>
@@ -98,52 +71,63 @@
         const GAS_URL = "https://script.google.com/macros/s/AKfycbzwuizRtNIjfLZc5y9kxVU4UbHLXX1j8x8RSMjJFZjMhiFz_S2gBGFC7nUePe40rEGq3Q/exec";
         let patients = [];
         let lastTime = "";
+        let isSaving = false; 
 
-        function toggleLoading(show) {
-            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
-        }
+        function toggleLoading(show) { document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none'; }
 
         function formatDisplayTime(timeStr) {
             if (!timeStr || timeStr === "無紀錄") return "無紀錄";
-            if (timeStr.includes('T') && timeStr.includes('Z')) {
-                const d = new Date(timeStr);
-                return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
-            }
-            return timeStr;
+            const d = new Date(timeStr.replace(/-/g, '/'));
+            if (isNaN(d.getTime())) return timeStr;
+            return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
         }
 
         async function loadData() {
+            if (isSaving) return; 
             toggleLoading(true);
             try {
-                const response = await fetch(GAS_URL);
+                const response = await fetch(`${GAS_URL}?t=${Date.now()}`, { redirect: 'follow' });
                 const data = await response.json();
                 patients = data.patients || [];
                 lastTime = formatDisplayTime(data.lastUpdate);
                 renderTable();
-            } catch (e) {
-                alert("載入失敗");
-            } finally {
-                toggleLoading(false);
-            }
+            } catch (e) { document.getElementById('lastUpdate').innerText = "連線失敗"; }
+            finally { toggleLoading(false); }
         }
 
         function estimateDeliveryTime(p) {
             const dilation = parseFloat(p.dilation);
-            const para = p.para ? p.para.toString().toLowerCase() : '';
+            const eff = parseFloat(p.effacement) || 0;
             const station = parseFloat(p.station) || 0;
+            const para = p.para ? p.para.toString().toLowerCase() : '';
             
-            if (isNaN(dilation) || dilation <= 0) return "--:--";
-            if (dilation >= 10) return "即將分娩";
+            if (isNaN(dilation) || dilation < 0) return "--:--";
+            if (dilation >= 10) return "已全開";
             
             const isMultipara = !(para.includes('p0') || para === '0');
-            const rate = isMultipara ? 1.5 : 1.0;
-            let hoursRemaining = ((10 - dilation) / rate) - (station * 0.3);
-            if (hoursRemaining < 0.5) hoursRemaining = 0.5;
+            let latentRate = isMultipara ? 0.8 : 0.4; 
+            let activeRate = isMultipara ? 1.8 : 1.2; 
+            let hoursRemaining = 0;
 
-            const baseDate = (!lastTime || lastTime === '無紀錄') ? new Date() : new Date(lastTime);
+            if (dilation < 6) {
+                const effFactor = Math.max(eff / 100, 0.2);
+                hoursRemaining = ((6 - dilation) / (latentRate * effFactor)) + (4 / activeRate);
+            } else {
+                hoursRemaining = (10 - dilation) / activeRate;
+            }
+
+            // Station 修正：胎頭越低越快 (-1 -> +1 每下降一級約縮短 10%)
+            hoursRemaining /= (1 + (station * 0.1));
+            hoursRemaining = Math.max(hoursRemaining, 0.33);
+
+            const baseDate = (!lastTime || lastTime === '無紀錄' || lastTime === '連線失敗') ? new Date() : new Date(lastTime);
             const estDate = new Date(baseDate.getTime() + hoursRemaining * 60 * 60 * 1000);
             
-            return `${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')}`;
+            // 明後天判斷
+            const diffDays = Math.round((new Date(estDate).setHours(0,0,0,0) - new Date(baseDate).setHours(0,0,0,0)) / 86400000);
+            let dayLabel = diffDays === 1 ? "(明)" : (diffDays === 2 ? "(後)" : "");
+
+            return `${dayLabel}${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')} (${hoursRemaining.toFixed(1)}h)`;
         }
 
         function renderTable() {
@@ -160,7 +144,7 @@
                     <td><span class="display-only">${val(p.para)}</span><input class="edit-only" type="text" value="${val(p.para)}" oninput="updateTempData(${index}, 'para', this.value)"></td>
                     <td><span class="display-only">${val(p.dilation)}</span><input class="edit-only" type="number" step="0.5" value="${val(p.dilation)}" oninput="updateTempData(${index}, 'dilation', this.value)"></td>
                     <td><span class="display-only">${val(p.effacement)}</span><input class="edit-only" type="number" value="${val(p.effacement)}" oninput="updateTempData(${index}, 'effacement', this.value)"></td>
-                    <td><span class="display-only">${val(p.station)}</span><input class="edit-only" type="text" inputmode="text" value="${val(p.station)}" oninput="updateTempData(${index}, 'station', this.value)"></td>
+                    <td><span class="display-only">${val(p.station)}</span><input class="edit-only" type="text" value="${val(p.station)}" oninput="updateTempData(${index}, 'station', this.value)"></td>
                     <td><span class="display-only">${val(p.vs)}</span><input class="edit-only" type="text" value="${val(p.vs)}" oninput="updateTempData(${index}, 'vs', this.value)"></td>
                     <td class="display-only ai-column">${estimateDeliveryTime(p)}</td>
                     <td class="edit-only"><button class="btn-delete" onclick="deleteRow(${index})">刪除</button></td>
@@ -169,24 +153,18 @@
             });
         }
 
-        // 處理刷新/取消按鈕的動作
         function handleRefresh() {
-            const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
-            if (isEditing) {
-                // 如果在編輯模式，則是取消編輯並退出
-                if (confirm("確定要取消編輯嗎？所有未儲存的變更將會遺失。")) {
-                    document.getElementById('mainBody').classList.remove('edit-mode');
+            if (document.body.classList.contains('edit-mode')) {
+                if (confirm("取消編輯？內容將回復。")) {
+                    document.body.classList.remove('edit-mode');
                     document.getElementById('mainEditBtn').innerText = "進入編輯";
-                    document.getElementById('refreshBtn').innerText = "刷新";
-                    loadData(); // 重新載入雲端原始資料
+                    loadData(); 
                 }
-            } else {
-                // 否則就是一般刷新
-                loadData();
-            }
+            } else { loadData(); }
         }
 
         async function saveToCloud() {
+            isSaving = true;
             toggleLoading(true);
             const now = new Date();
             const timeString = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
@@ -198,30 +176,23 @@
                 });
                 lastTime = timeString;
                 renderTable();
-                alert("雲端同步成功！");
+                setTimeout(() => { isSaving = false; }, 2000); 
+                alert("儲存成功");
             } catch (e) {
-                location.reload(); 
-            } finally {
-                toggleLoading(false);
-            }
+                isSaving = false;
+                alert("儲存失敗");
+            } finally { toggleLoading(false); }
         }
 
         function toggleEditMode() {
             const body = document.getElementById('mainBody');
-            const editBtn = document.getElementById('mainEditBtn');
-            const refreshBtn = document.getElementById('refreshBtn');
-            
             if (body.classList.contains('edit-mode')) {
-                // 點擊「完成儲存」
                 body.classList.remove('edit-mode');
-                editBtn.innerText = "進入編輯";
-                refreshBtn.innerText = "刷新";
+                document.getElementById('mainEditBtn').innerText = "進入編輯";
                 saveToCloud();
             } else {
-                // 點擊「進入編輯」
                 body.classList.add('edit-mode');
-                editBtn.innerText = "完成儲存";
-                refreshBtn.innerText = "取消編輯";
+                document.getElementById('mainEditBtn').innerText = "完成儲存";
             }
         }
 
@@ -230,16 +201,8 @@
             renderTable();
         }
 
-        function updateTempData(index, field, value) {
-            patients[index][field] = value;
-        }
-
-        function deleteRow(index) {
-            if (confirm("確定刪除？")) {
-                patients.splice(index, 1);
-                renderTable();
-            }
-        }
+        function updateTempData(index, field, value) { patients[index][field] = value; }
+        function deleteRow(index) { if (confirm("確定刪除？")) { patients.splice(index, 1); renderTable(); } }
 
         loadData();
     </script>
