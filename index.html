@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>產科小工具 - v2.0版</title>
+    <title>產科小工具</title>
     <style>
         :root {
             --primary-color: #f06292;
@@ -104,16 +104,11 @@
             document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         }
 
-        // --- 優化：解決 T09:30:30.000Z 格式問題 ---
         function parseToDate(dateStr) {
             if (!dateStr || dateStr === "無紀錄") return new Date();
-            
-            // 如果偵測到 ISO 格式 (包含 T 和 Z)
             if (dateStr.toString().includes('T') && dateStr.toString().includes('Z')) {
                 return new Date(dateStr); 
             }
-            
-            // 處理一般的 YYYY/MM/DD 格式
             let normalized = dateStr.replace(/-/g, '/').replace('T', ' ').replace(/\..*$/, '');
             let d = new Date(normalized);
             return isNaN(d.getTime()) ? new Date() : d;
@@ -132,7 +127,6 @@
                 const nocacheUrl = `${GAS_URL}?t=${new Date().getTime()}`;
                 const response = await fetch(nocacheUrl);
                 const data = await response.json();
-                
                 patients = data.patients || [];
                 rawUpdateStr = data.lastUpdate || "無紀錄";
                 renderTable();
@@ -226,15 +220,17 @@
                     body: JSON.stringify({ patients, lastUpdate: timeString })
                 });
                 
+                // 儲存成功後稍等並自動刷新
                 await new Promise(resolve => setTimeout(resolve, 800));
-                await loadData(); // 儲存完畢後重新載入，獲取雲端最終時間
+                isSaving = false; // 解鎖以允許 loadData 執行
+                await loadData(); 
                 
                 alert("雲端同步成功！");
             } catch (e) {
                 console.error("同步失敗:", e);
+                isSaving = false;
                 alert("同步失敗，建議手動刷新頁面");
             } finally {
-                isSaving = false;
                 toggleLoading(false);
             }
         }
@@ -242,13 +238,15 @@
         function handleRefresh() {
             const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
             if (isEditing) {
+                // 情境：退出編輯（點擊取消）
                 if (confirm("確定取消編輯？資料將回復至上次儲存狀態。")) {
                     document.getElementById('mainBody').classList.remove('edit-mode');
                     document.getElementById('mainEditBtn').innerText = "進入編輯";
                     document.getElementById('refreshBtn').innerText = "刷新";
-                    loadData();
+                    loadData(); // 自動刷新一次
                 }
             } else {
+                // 情境：純手動刷新
                 loadData();
             }
         }
@@ -258,10 +256,11 @@
             const editBtn = document.getElementById('mainEditBtn');
             const refreshBtn = document.getElementById('refreshBtn');
             if (body.classList.contains('edit-mode')) {
+                // 情境：完成編輯（點擊完成儲存）
                 body.classList.remove('edit-mode');
                 editBtn.innerText = "進入編輯";
                 refreshBtn.innerText = "刷新";
-                saveToCloud();
+                saveToCloud(); // 內部已包含儲存後自動刷新
             } else {
                 body.classList.add('edit-mode');
                 editBtn.innerText = "完成儲存";
