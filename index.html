@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>產科小工具 - 雲端同步版</title>
+    <title>產科小工具 - 雲端同步優化版</title>
     <style>
         :root {
             --primary-color: #f06292;
@@ -95,18 +95,17 @@
     </div>
 
     <script>
+        // 你的 GAS 網址
         const GAS_URL = "https://script.google.com/macros/s/AKfycbzwuizRtNIjfLZc5y9kxVU4UbHLXX1j8x8RSMjJFZjMhiFz_S2gBGFC7nUePe40rEGq3Q/exec";
         let patients = [];
-        let rawUpdateStr = ""; // 儲存原始的時間字串作為參考點
+        let rawUpdateStr = ""; 
 
         function toggleLoading(show) {
             document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         }
 
-        // 格式化時間：將 ISO 或 原始字串 轉為 JS Date 物件
         function parseToDate(dateStr) {
             if (!dateStr || dateStr === "無紀錄") return new Date();
-            // 處理 GAS 轉出的特殊格式
             let normalized = dateStr.replace(/-/g, '/').replace('T', ' ').replace(/\..*$/, '');
             let d = new Date(normalized);
             return isNaN(d.getTime()) ? new Date() : d;
@@ -120,13 +119,16 @@
         async function loadData() {
             toggleLoading(true);
             try {
-                const response = await fetch(GAS_URL);
+                // 核心改進：加上 timestamp 防止瀏覽器讀取舊快取
+                const nocacheUrl = `${GAS_URL}?t=${new Date().getTime()}`;
+                const response = await fetch(nocacheUrl);
                 const data = await response.json();
                 patients = data.patients || [];
                 rawUpdateStr = data.lastUpdate || "無紀錄";
                 renderTable();
             } catch (e) {
-                alert("載入失敗");
+                console.error(e);
+                alert("載入失敗，請檢查網路");
             } finally {
                 toggleLoading(false);
             }
@@ -142,7 +144,6 @@
             if (dil >= 10) return "已全開";
 
             const isMultipara = !(paraStr.includes('p0') || paraStr === '0');
-            
             let latentRate = isMultipara ? 0.8 : 0.4;
             let activeRate = isMultipara ? 2.0 : 1.2;
             let totalHours = 0;
@@ -160,27 +161,25 @@
 
             const stationBonus = 1 + (station * 0.1);
             totalHours = totalHours / stationBonus;
-
             if (totalHours < 0.33) totalHours = 0.33;
 
-            // --- 核心優化：嚴格以最後更新時間為基點 ---
             const referenceDate = parseToDate(rawUpdateStr);
             const estDate = new Date(referenceDate.getTime() + totalHours * 60 * 60 * 1000);
             
-            // 計算天數差 (以日期為準)
-            const refZero = new Date(referenceDate).setHours(0,0,0,0);
-            const estZero = new Date(estDate).setHours(0,0,0,0);
-            const diffDays = Math.round((estZero - refZero) / (1000 * 60 * 60 * 24));
+            // 修正跨日邏輯，避免直接修改 referenceDate
+            const refDay = new Date(referenceDate);
+            refDay.setHours(0,0,0,0);
+            const estDay = new Date(estDate);
+            estDay.setHours(0,0,0,0);
+            
+            const diffDays = Math.round((estDay.getTime() - refDay.getTime()) / (1000 * 60 * 60 * 24));
             
             let dateLabel = '';
             if (diffDays === 1) dateLabel = '(明) ';
             else if (diffDays === 2) dateLabel = '(後) ';
             else if (diffDays > 2) dateLabel = `(${estDate.getMonth()+1}/${estDate.getDate()}) `;
 
-            const hh = estDate.getHours().toString().padStart(2, '0');
-            const mm = estDate.getMinutes().toString().padStart(2, '0');
-
-            return `${dateLabel}${hh}:${mm} (${totalHours.toFixed(1)}h)`;
+            return `${dateLabel}${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')} (${totalHours.toFixed(1)}h)`;
         }
 
         function renderTable() {
@@ -199,7 +198,7 @@
                     <td><span class="display-only">${val(p.para)}</span><input class="edit-only" type="text" value="${val(p.para)}" oninput="updateTempData(${index}, 'para', this.value)"></td>
                     <td><span class="display-only">${val(p.dilation)}</span><input class="edit-only" type="number" step="0.5" value="${val(p.dilation)}" oninput="updateTempData(${index}, 'dilation', this.value)"></td>
                     <td><span class="display-only">${val(p.effacement)}</span><input class="edit-only" type="number" value="${val(p.effacement)}" oninput="updateTempData(${index}, 'effacement', this.value)"></td>
-                    <td><span class="display-only">${val(p.station)}</span><input class="edit-only" type="text" inputmode="text" value="${val(p.station)}" oninput="updateTempData(${index}, 'station', this.value)"></td>
+                    <td><span class="display-only">${val(p.station)}</span><input class="edit-only" type="text" value="${val(p.station)}" oninput="updateTempData(${index}, 'station', this.value)"></td>
                     <td><span class="display-only">${val(p.vs)}</span><input class="edit-only" type="text" value="${val(p.vs)}" oninput="updateTempData(${index}, 'vs', this.value)"></td>
                     <td class="display-only ai-column">${estimateDeliveryTime(p)}</td>
                     <td class="edit-only"><button class="btn-delete" onclick="deleteRow(${index})">刪除</button></td>
@@ -208,10 +207,36 @@
             });
         }
 
+        async function saveToCloud() {
+            toggleLoading(true);
+            const now = new Date();
+            const timeString = formatDisplayTime(now);
+            
+            try {
+                // 先在本地端鎖定最新時間，不等伺服器回傳，防止 UI 閃爍或回跳
+                rawUpdateStr = timeString; 
+                
+                await fetch(GAS_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ patients, lastUpdate: timeString })
+                });
+                
+                // 儲存後不強迫重新整理，直接渲染目前數據最準確
+                renderTable(); 
+                alert("雲端同步成功！");
+            } catch (e) {
+                // 發生錯誤才強制刷新頁面以同步狀態
+                console.error(e);
+                location.reload(); 
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
         function handleRefresh() {
             const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
             if (isEditing) {
-                if (confirm("確定取消編輯？資料將回復至上次儲存狀態。")) {
+                if (confirm("確定取消編輯？")) {
                     document.getElementById('mainBody').classList.remove('edit-mode');
                     document.getElementById('mainEditBtn').innerText = "進入編輯";
                     document.getElementById('refreshBtn').innerText = "刷新";
@@ -219,27 +244,6 @@
                 }
             } else {
                 loadData();
-            }
-        }
-
-        async function saveToCloud() {
-            toggleLoading(true);
-            const now = new Date();
-            // 儲存標準格式
-            const timeString = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-            
-            try {
-                await fetch(GAS_URL, {
-                    method: "POST",
-                    body: JSON.stringify({ patients, lastUpdate: timeString })
-                });
-                rawUpdateStr = timeString;
-                renderTable();
-                alert("雲端同步成功！");
-            } catch (e) {
-                location.reload(); 
-            } finally {
-                toggleLoading(false);
             }
         }
 
