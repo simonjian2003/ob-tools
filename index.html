@@ -42,7 +42,7 @@
         table { width: 100%; border-collapse: collapse; min-width: 800px; }
         th, td { border: 1px solid #eee; padding: 10px 5px; text-align: center; font-size: 14px; }
         th { background-color: var(--primary-color); color: white; white-space: nowrap; }
-        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 130px; }
+        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 140px; }
         
         .edit-only { display: none; }
         body.edit-mode .edit-only { display: table-cell; }
@@ -65,7 +65,7 @@
     <div class="header">
         <div>
             <h1>產科小工具</h1>
-            <div class="info-bar">更新：<span id="lastUpdate">載入中...</span></div>
+            <div class="info-bar">最後內診/更新：<span id="lastUpdate">載入中...</span></div>
         </div>
         <div class="btn-group">
             <button id="mainEditBtn" class="btn-edit" onclick="toggleEditMode()">進入編輯</button>
@@ -97,19 +97,24 @@
     <script>
         const GAS_URL = "https://script.google.com/macros/s/AKfycbzwuizRtNIjfLZc5y9kxVU4UbHLXX1j8x8RSMjJFZjMhiFz_S2gBGFC7nUePe40rEGq3Q/exec";
         let patients = [];
-        let lastTime = "";
+        let rawUpdateStr = ""; // 儲存原始的時間字串作為參考點
 
         function toggleLoading(show) {
             document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         }
 
-        function formatDisplayTime(timeStr) {
-            if (!timeStr || timeStr === "無紀錄") return "無紀錄";
-            if (timeStr.includes('T') && timeStr.includes('Z')) {
-                const d = new Date(timeStr);
-                return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
-            }
-            return timeStr;
+        // 格式化時間：將 ISO 或 原始字串 轉為 JS Date 物件
+        function parseToDate(dateStr) {
+            if (!dateStr || dateStr === "無紀錄") return new Date();
+            // 處理 GAS 轉出的特殊格式
+            let normalized = dateStr.replace(/-/g, '/').replace('T', ' ').replace(/\..*$/, '');
+            let d = new Date(normalized);
+            return isNaN(d.getTime()) ? new Date() : d;
+        }
+
+        function formatDisplayTime(dateObj) {
+            const d = dateObj;
+            return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
         }
 
         async function loadData() {
@@ -118,7 +123,7 @@
                 const response = await fetch(GAS_URL);
                 const data = await response.json();
                 patients = data.patients || [];
-                lastTime = formatDisplayTime(data.lastUpdate);
+                rawUpdateStr = data.lastUpdate || "無紀錄";
                 renderTable();
             } catch (e) {
                 alert("載入失敗");
@@ -158,32 +163,31 @@
 
             if (totalHours < 0.33) totalHours = 0.33;
 
-            const baseDate = (!lastTime || lastTime === '無紀錄') ? new Date() : new Date(lastTime);
-            const estDate = new Date(baseDate.getTime() + totalHours * 60 * 60 * 1000);
+            // --- 核心優化：嚴格以最後更新時間為基點 ---
+            const referenceDate = parseToDate(rawUpdateStr);
+            const estDate = new Date(referenceDate.getTime() + totalHours * 60 * 60 * 1000);
             
-            const hh = estDate.getHours().toString().padStart(2, '0');
-            const mm = estDate.getMinutes().toString().padStart(2, '0');
-            
-            // 計算日期差異標記
-            const diffTime = estDate.setHours(0,0,0,0) - baseDate.setHours(0,0,0,0);
-            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+            // 計算天數差 (以日期為準)
+            const refZero = new Date(referenceDate).setHours(0,0,0,0);
+            const estZero = new Date(estDate).setHours(0,0,0,0);
+            const diffDays = Math.round((estZero - refZero) / (1000 * 60 * 60 * 24));
             
             let dateLabel = '';
             if (diffDays === 1) dateLabel = '(明) ';
             else if (diffDays === 2) dateLabel = '(後) ';
             else if (diffDays > 2) dateLabel = `(${estDate.getMonth()+1}/${estDate.getDate()}) `;
 
-            // 重新取得正確的小時與分鐘（因為 setHours 改變了暫存變數）
-            const finalDate = new Date(baseDate.getTime() + totalHours * 60 * 60 * 1000);
-            const finalHH = finalDate.getHours().toString().padStart(2, '0');
-            const finalMM = finalDate.getMinutes().toString().padStart(2, '0');
+            const hh = estDate.getHours().toString().padStart(2, '0');
+            const mm = estDate.getMinutes().toString().padStart(2, '0');
 
-            return `${dateLabel}${finalHH}:${finalMM} (${totalHours.toFixed(1)}h)`;
+            return `${dateLabel}${hh}:${mm} (${totalHours.toFixed(1)}h)`;
         }
 
         function renderTable() {
             const tbody = document.getElementById('patientTableBody');
-            document.getElementById('lastUpdate').innerText = lastTime;
+            const refDate = parseToDate(rawUpdateStr);
+            document.getElementById('lastUpdate').innerText = rawUpdateStr === "無紀錄" ? "無紀錄" : formatDisplayTime(refDate);
+            
             tbody.innerHTML = '';
             const val = (v) => (v === null || v === undefined || v === "") ? "" : v;
 
@@ -207,7 +211,7 @@
         function handleRefresh() {
             const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
             if (isEditing) {
-                if (confirm("確定取消？")) {
+                if (confirm("確定取消編輯？資料將回復至上次儲存狀態。")) {
                     document.getElementById('mainBody').classList.remove('edit-mode');
                     document.getElementById('mainEditBtn').innerText = "進入編輯";
                     document.getElementById('refreshBtn').innerText = "刷新";
@@ -221,6 +225,7 @@
         async function saveToCloud() {
             toggleLoading(true);
             const now = new Date();
+            // 儲存標準格式
             const timeString = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
             
             try {
@@ -228,7 +233,7 @@
                     method: "POST",
                     body: JSON.stringify({ patients, lastUpdate: timeString })
                 });
-                lastTime = timeString;
+                rawUpdateStr = timeString;
                 renderTable();
                 alert("雲端同步成功！");
             } catch (e) {
