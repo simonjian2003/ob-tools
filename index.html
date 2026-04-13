@@ -3,42 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>產科小工具 - 雲端同步版</title>
+    <title>產科小工具 - v2.0版</title>
     <style>
-        :root { --primary-color: #f06292; --bg-color: #fff5f8; --accent-color: #d81b60; --cancel-color: #9e9e9e; }
-        body { font-family: "Microsoft JhengHei", -apple-system, sans-serif; background-color: var(--bg-color); margin: 0; padding: 10px; }
+        :root {
+            --primary-color: #f06292;
+            --bg-color: #fff5f8;
+            --accent-color: #d81b60;
+            --cancel-color: #9e9e9e;
+        }
+        
+        body { 
+            font-family: "Microsoft JhengHei", -apple-system, sans-serif; 
+            background-color: var(--bg-color); 
+            margin: 0; 
+            padding: 10px;
+        }
+        
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
         h1 { color: #880e4f; margin: 0; font-size: 20px; }
-        .info-bar { margin-top: 5px; color: #666; font-size: 0.8em; font-weight: bold; }
-        #lastUpdate { color: var(--accent-color); }
+        .info-bar { margin-top: 5px; color: #666; font-size: 0.8em; }
+        
         .btn-group { display: flex; gap: 5px; }
         button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; transition: 0.3s; font-size: 14px; }
         .btn-edit { background-color: #64b5f6; color: white; white-space: nowrap; }
         .btn-refresh { background-color: var(--cancel-color); color: white; white-space: nowrap; }
         .btn-add { background-color: var(--primary-color); color: white; margin-bottom: 10px; width: 100%; }
         .btn-delete { background-color: #e57373; color: white; padding: 5px; font-size: 12px; border-radius: 4px; }
-        .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 8px; background: white; }
+
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-radius: 8px;
+            background: white;
+        }
+
         table { width: 100%; border-collapse: collapse; min-width: 800px; }
         th, td { border: 1px solid #eee; padding: 10px 5px; text-align: center; font-size: 14px; }
         th { background-color: var(--primary-color); color: white; white-space: nowrap; }
-        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 130px; }
+        .ai-column { background-color: #fff0f5; color: var(--accent-color); font-weight: bold; min-width: 140px; }
+        
         .edit-only { display: none; }
         body.edit-mode .edit-only { display: table-cell; }
         body.edit-mode button.edit-only { display: block; }
         body.edit-mode .display-only { display: none; }
         body.edit-mode .btn-edit { background-color: #4caf50; }
-        input { width: 100%; padding: 8px 4px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; text-align: center; }
-        #loadingOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 1000; justify-content: center; align-items: center; font-weight: bold; color: var(--accent-color); }
+        
+        input { width: 100%; padding: 8px 4px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
+
+        #loadingOverlay { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255,255,255,0.8); z-index: 1000; justify-content: center; align-items: center; font-weight: bold; color: var(--accent-color);
+        }
     </style>
 </head>
 <body id="mainBody">
 
-    <div id="loadingOverlay">雲端連線中...</div>
+    <div id="loadingOverlay">雲端同步中...</div>
 
     <div class="header">
         <div>
             <h1>產科小工具</h1>
-            <div class="info-bar">更新：<span id="lastUpdate">載入中...</span></div>
+            <div class="info-bar">最後內診/更新：<span id="lastUpdate">載入中...</span></div>
         </div>
         <div class="btn-group">
             <button id="mainEditBtn" class="btn-edit" onclick="toggleEditMode()">進入編輯</button>
@@ -59,7 +86,7 @@
                     <th style="width: 60px;">Eff</th>
                     <th style="width: 70px;">Station</th>
                     <th style="width: 80px;">VS</th>
-                    <th class="display-only">預估生產時間 (AI)</th>
+                    <th class="display-only">預估生產 (AI)</th>
                     <th class="edit-only">操作</th>
                 </tr>
             </thead>
@@ -70,69 +97,101 @@
     <script>
         const GAS_URL = "https://script.google.com/macros/s/AKfycbx2JWTv0js2SU_qHEstb8wejZmty3Y68ptZ_iLu1tokfnlKygQykG-ORAQACAXZQYMsJw/exec";
         let patients = [];
-        let lastTime = "";
-        let isSaving = false; 
+        let rawUpdateStr = ""; 
+        let isSaving = false;
 
-        function toggleLoading(show) { document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none'; }
+        function toggleLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+        }
 
-        function formatDisplayTime(timeStr) {
-            if (!timeStr || timeStr === "無紀錄") return "無紀錄";
-            const d = new Date(timeStr.replace(/-/g, '/'));
-            if (isNaN(d.getTime())) return timeStr;
+        // --- 優化：解決 T09:30:30.000Z 格式問題 ---
+        function parseToDate(dateStr) {
+            if (!dateStr || dateStr === "無紀錄") return new Date();
+            
+            // 如果偵測到 ISO 格式 (包含 T 和 Z)
+            if (dateStr.toString().includes('T') && dateStr.toString().includes('Z')) {
+                return new Date(dateStr); 
+            }
+            
+            // 處理一般的 YYYY/MM/DD 格式
+            let normalized = dateStr.replace(/-/g, '/').replace('T', ' ').replace(/\..*$/, '');
+            let d = new Date(normalized);
+            return isNaN(d.getTime()) ? new Date() : d;
+        }
+
+        function formatDisplayTime(dateObj) {
+            if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return "格式錯誤";
+            const d = dateObj;
             return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
         }
 
         async function loadData() {
-            if (isSaving) return; 
+            if (isSaving) return;
             toggleLoading(true);
             try {
-                const response = await fetch(`${GAS_URL}?t=${Date.now()}`, { redirect: 'follow' });
+                const nocacheUrl = `${GAS_URL}?t=${new Date().getTime()}`;
+                const response = await fetch(nocacheUrl);
                 const data = await response.json();
+                
                 patients = data.patients || [];
-                lastTime = formatDisplayTime(data.lastUpdate);
+                rawUpdateStr = data.lastUpdate || "無紀錄";
                 renderTable();
-            } catch (e) { document.getElementById('lastUpdate').innerText = "連線失敗"; }
-            finally { toggleLoading(false); }
+            } catch (e) {
+                console.error("載入失敗:", e);
+            } finally {
+                toggleLoading(false);
+            }
         }
 
         function estimateDeliveryTime(p) {
-            const dilation = parseFloat(p.dilation);
+            const dil = parseFloat(p.dilation);
             const eff = parseFloat(p.effacement) || 0;
             const station = parseFloat(p.station) || 0;
-            const para = p.para ? p.para.toString().toLowerCase() : '';
-            
-            if (isNaN(dilation) || dilation < 0) return "--:--";
-            if (dilation >= 10) return "已全開";
-            
-            const isMultipara = !(para.includes('p0') || para === '0');
-            let latentRate = isMultipara ? 0.8 : 0.4; 
-            let activeRate = isMultipara ? 1.8 : 1.2; 
-            let hoursRemaining = 0;
+            const paraStr = p.para ? p.para.toString().toLowerCase() : '';
 
-            if (dilation < 6) {
-                const effFactor = Math.max(eff / 100, 0.2);
-                hoursRemaining = ((6 - dilation) / (latentRate * effFactor)) + (4 / activeRate);
+            if (isNaN(dil) || dil < 0) return "--:--";
+            if (dil >= 10) return "已全開";
+
+            const isMultipara = !(paraStr.includes('p0') || paraStr === '0');
+            let latentRate = isMultipara ? 0.8 : 0.4;
+            let activeRate = isMultipara ? 2.0 : 1.2;
+            let totalHours = 0;
+
+            if (dil < 6) {
+                const remainingLatentDil = 6 - dil;
+                let effFactor = (eff / 100);
+                if (effFactor < 0.2) effFactor = 0.2;
+                totalHours += remainingLatentDil / (latentRate * effFactor);
+                totalHours += 4 / activeRate;
             } else {
-                hoursRemaining = (10 - dilation) / activeRate;
+                const remainingActiveDil = 10 - dil;
+                totalHours += remainingActiveDil / (activeRate * 1.3);
             }
 
-            // Station 修正：胎頭越低越快 (-1 -> +1 每下降一級約縮短 10%)
-            hoursRemaining /= (1 + (station * 0.1));
-            hoursRemaining = Math.max(hoursRemaining, 0.33);
+            const stationBonus = 1 + (station * 0.1);
+            totalHours = totalHours / stationBonus;
+            if (totalHours < 0.33) totalHours = 0.33;
 
-            const baseDate = (!lastTime || lastTime === '無紀錄' || lastTime === '連線失敗') ? new Date() : new Date(lastTime);
-            const estDate = new Date(baseDate.getTime() + hoursRemaining * 60 * 60 * 1000);
+            const referenceDate = parseToDate(rawUpdateStr);
+            const estDate = new Date(referenceDate.getTime() + totalHours * 60 * 60 * 1000);
             
-            // 明後天判斷
-            const diffDays = Math.round((new Date(estDate).setHours(0,0,0,0) - new Date(baseDate).setHours(0,0,0,0)) / 86400000);
-            let dayLabel = diffDays === 1 ? "(明)" : (diffDays === 2 ? "(後)" : "");
+            const refDay = new Date(referenceDate); refDay.setHours(0,0,0,0);
+            const estDay = new Date(estDate); estDay.setHours(0,0,0,0);
+            const diffDays = Math.round((estDay.getTime() - refDay.getTime()) / (1000 * 60 * 60 * 24));
+            
+            let dateLabel = '';
+            if (diffDays === 1) dateLabel = '(明) ';
+            else if (diffDays === 2) dateLabel = '(後) ';
+            else if (diffDays > 2) dateLabel = `(${estDate.getMonth()+1}/${estDate.getDate()}) `;
 
-            return `${dayLabel}${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')} (${hoursRemaining.toFixed(1)}h)`;
+            return `${dateLabel}${estDate.getHours().toString().padStart(2, '0')}:${estDate.getMinutes().toString().padStart(2, '0')} (${totalHours.toFixed(1)}h)`;
         }
 
         function renderTable() {
             const tbody = document.getElementById('patientTableBody');
-            document.getElementById('lastUpdate').innerText = lastTime;
+            const refDate = parseToDate(rawUpdateStr);
+            document.getElementById('lastUpdate').innerText = rawUpdateStr === "無紀錄" ? "無紀錄" : formatDisplayTime(refDate);
+            
             tbody.innerHTML = '';
             const val = (v) => (v === null || v === undefined || v === "") ? "" : v;
 
@@ -153,46 +212,60 @@
             });
         }
 
-        function handleRefresh() {
-            if (document.body.classList.contains('edit-mode')) {
-                if (confirm("取消編輯？內容將回復。")) {
-                    document.body.classList.remove('edit-mode');
-                    document.getElementById('mainEditBtn').innerText = "進入編輯";
-                    loadData(); 
-                }
-            } else { loadData(); }
-        }
-
         async function saveToCloud() {
+            if (isSaving) return;
             isSaving = true;
             toggleLoading(true);
+
             const now = new Date();
-            const timeString = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-            
+            const timeString = formatDisplayTime(now);
+
             try {
                 await fetch(GAS_URL, {
                     method: "POST",
                     body: JSON.stringify({ patients, lastUpdate: timeString })
                 });
-                lastTime = timeString;
-                renderTable();
-                setTimeout(() => { isSaving = false; }, 2000); 
-                alert("儲存成功");
+                
+                await new Promise(resolve => setTimeout(resolve, 800));
+                await loadData(); // 儲存完畢後重新載入，獲取雲端最終時間
+                
+                alert("雲端同步成功！");
             } catch (e) {
+                console.error("同步失敗:", e);
+                alert("同步失敗，建議手動刷新頁面");
+            } finally {
                 isSaving = false;
-                alert("儲存失敗");
-            } finally { toggleLoading(false); }
+                toggleLoading(false);
+            }
+        }
+
+        function handleRefresh() {
+            const isEditing = document.getElementById('mainBody').classList.contains('edit-mode');
+            if (isEditing) {
+                if (confirm("確定取消編輯？資料將回復至上次儲存狀態。")) {
+                    document.getElementById('mainBody').classList.remove('edit-mode');
+                    document.getElementById('mainEditBtn').innerText = "進入編輯";
+                    document.getElementById('refreshBtn').innerText = "刷新";
+                    loadData();
+                }
+            } else {
+                loadData();
+            }
         }
 
         function toggleEditMode() {
             const body = document.getElementById('mainBody');
+            const editBtn = document.getElementById('mainEditBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
             if (body.classList.contains('edit-mode')) {
                 body.classList.remove('edit-mode');
-                document.getElementById('mainEditBtn').innerText = "進入編輯";
+                editBtn.innerText = "進入編輯";
+                refreshBtn.innerText = "刷新";
                 saveToCloud();
             } else {
                 body.classList.add('edit-mode');
-                document.getElementById('mainEditBtn').innerText = "完成儲存";
+                editBtn.innerText = "完成儲存";
+                refreshBtn.innerText = "取消編輯";
             }
         }
 
@@ -201,8 +274,16 @@
             renderTable();
         }
 
-        function updateTempData(index, field, value) { patients[index][field] = value; }
-        function deleteRow(index) { if (confirm("確定刪除？")) { patients.splice(index, 1); renderTable(); } }
+        function updateTempData(index, field, value) {
+            patients[index][field] = value;
+        }
+
+        function deleteRow(index) {
+            if (confirm("確定刪除？")) {
+                patients.splice(index, 1);
+                renderTable();
+            }
+        }
 
         loadData();
     </script>
