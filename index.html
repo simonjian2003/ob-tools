@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>產科小工具 - 雲端最終同步版</title>
+    <title>產科小工具 - v2.2版</title>
     <style>
         :root { --primary-color: #f06292; --bg-color: #fff5f8; --accent-color: #d81b60; --cancel-color: #9e9e9e; }
         body { font-family: "Microsoft JhengHei", -apple-system, sans-serif; background-color: var(--bg-color); margin: 0; padding: 10px; -webkit-tap-highlight-color: transparent; }
@@ -209,11 +209,11 @@
             const timeString = formatDisplayTime(new Date());
 
             try {
-                // 1. 先執行儲存 POST
-                const response = await fetch(GAS_URL, { 
-                    method: "POST", 
-                    body: JSON.stringify({ patients, lastUpdate: timeString }) 
-                });
+                const response = await fetch(`${GAS_URL}?t=${Date.now()}`, {
+    method: "GET",
+    mode: "cors", // 強制開啟跨網域模式
+    redirect: "follow" // 重要：Google Script 會跳轉網址，必須設為 follow
+});
                 
                 // 2. 緩衝 1 秒確保 GAS 後端寫入完成
                 await new Promise(r => setTimeout(r, 1000));
